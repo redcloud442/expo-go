@@ -1,51 +1,108 @@
-import React from "react";
-import { FlatList, ScrollView, StyleSheet, View } from "react-native";
+import AddFundsModal from "@/components/Goal/AddFunds";
+import AddGoalModal from "@/components/Goal/AddGoalModal";
+import { BankAccountType, GoalType } from "@/lib/types/types";
+import { financeService, getGoals } from "@/services/finance/financeService";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState } from "react";
+import { FlatList, StyleSheet, View } from "react-native";
 import {
   Button,
   IconButton,
   ProgressBar,
   Surface,
   Text,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 
 export default function GoalsSection() {
   const theme = useTheme();
 
-  const MOCK_GOALS = [
-    {
-      id: "1",
-      name: "Emergency Fund",
-      target: 5000,
-      current: 2500,
-      icon: "shield-check",
-      color: theme.colors.primary,
-    },
-    {
-      id: "2",
-      name: "Japan Vacation",
-      target: 3000,
-      current: 1200,
-      icon: "airplane",
-      color: theme.colors.secondary,
-    },
-    {
-      id: "3",
-      name: "New Gaming PC",
-      target: 1500,
-      current: 1400,
-      icon: "laptop",
-      color: theme.colors.tertiary,
-    },
-  ];
+  const queryClient = useQueryClient();
+  const [take, setTake] = useState(10);
+  const [skip, setSkip] = useState(1);
 
-  const renderGoal = ({ item }: { item: (typeof MOCK_GOALS)[0] }) => {
-    const progress = item.current / item.target;
-    const remaining = item.target - item.current;
+  const [fundsVisible, setFundsVisible] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
+  const [visible, setVisible] = useState(false);
+  const { data: goals } = getGoals({ take, skip });
+
+  const accounts = queryClient.getQueryData<BankAccountType[]>([
+    "bank-accounts",
+  ]);
+
+  const createGoalMutation = useMutation({
+    mutationKey: ["goals"],
+    mutationFn: financeService.createGoal,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+    onError: (error) => {
+      console.error(error);
+    },
+  });
+
+  const addFundsMutation = useMutation({
+    mutationKey: ["add-funds-to-goal"],
+    mutationFn: financeService.addFundsToGoal,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    },
+    onError: (error) => {
+      console.error(error);
+    },
+  });
+
+  const handleOpenAddFunds = (goal: GoalType) => {
+    setSelectedGoal(goal);
+    setFundsVisible(true);
+  };
+
+  const AddGoalCard = () => (
+    <Surface
+      elevation={1}
+      style={[
+        styles.addGoalCard,
+        { backgroundColor: theme.colors.surfaceVariant, overflow: "hidden" },
+      ]}
+    >
+      <TouchableRipple
+        onPress={() => setVisible(true)}
+        rippleColor="rgba(0, 0, 0, .1)"
+      >
+        <View
+          style={[
+            styles.addGoalContent,
+            { padding: 12, flexDirection: "row", alignItems: "center" },
+          ]}
+        >
+          <IconButton
+            icon="plus-circle"
+            size={32}
+            iconColor={theme.colors.primary}
+          />
+          <View style={{ flex: 1, marginLeft: 4 }}>
+            <Text variant="labelLarge" style={{ fontWeight: "700" }}>
+              Create Goal
+            </Text>
+            <Text variant="bodySmall" style={{ opacity: 0.6 }}>
+              Set a target and start saving
+            </Text>
+          </View>
+          <IconButton icon="chevron-right" size={20} />
+        </View>
+      </TouchableRipple>
+    </Surface>
+  );
+  /* -------------------- Goal Card -------------------- */
+  const renderGoal = ({ item }: { item: GoalType }) => {
+    const progress = Math.min(item.currentAmount / item.targetAmount, 1);
+    const remaining = item.targetAmount - item.currentAmount;
 
     return (
       <Surface
-        elevation={2}
+        elevation={1}
         style={[styles.goalCard, { backgroundColor: theme.colors.surface }]}
       >
         {/* Header */}
@@ -53,65 +110,67 @@ export default function GoalsSection() {
           <View
             style={[
               styles.iconContainer,
-              { backgroundColor: theme.colors.surfaceVariant },
+              { backgroundColor: theme.colors.primary + "20" },
             ]}
           >
-            <IconButton icon={item.icon} iconColor={item.color} size={22} />
+            <IconButton
+              icon="star"
+              iconColor={theme.colors.primary}
+              size={22}
+            />
           </View>
 
           <View style={styles.goalText}>
-            <Text
-              variant="titleMedium"
-              style={{ color: theme.colors.onSurface }}
-            >
+            <Text variant="titleMedium" style={{ fontWeight: "700" }}>
               {item.name}
             </Text>
 
-            <Text
-              variant="bodySmall"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              ${item.current.toLocaleString()} / ${item.target.toLocaleString()}
+            <Text variant="bodySmall" style={{ opacity: 0.6 }}>
+              ₱{item.currentAmount.toLocaleString()} / ₱
+              {item.targetAmount.toLocaleString()}
             </Text>
           </View>
 
-          <Text
-            variant="labelLarge"
-            style={{ color: item.color, fontWeight: "700" }}
+          <View
+            style={[
+              styles.percentPill,
+              { backgroundColor: theme.colors.primary + "25" },
+            ]}
           >
-            {Math.round(progress * 100)}%
-          </Text>
+            <Text
+              style={{
+                color: theme.colors.primary,
+                fontWeight: "800",
+                fontSize: 12,
+              }}
+            >
+              {Math.round(progress * 100)}%
+            </Text>
+          </View>
         </View>
 
         {/* Progress */}
         <ProgressBar
           progress={progress}
-          color={item.color}
-          style={[
-            styles.progressBar,
-            { backgroundColor: theme.colors.surfaceVariant },
-          ]}
+          color={theme.colors.primary}
+          style={styles.progressBar}
         />
 
         {/* Footer */}
         <View style={styles.goalFooter}>
-          <Text
-            variant="labelSmall"
-            style={{ color: theme.colors.onSurfaceVariant }}
-          >
+          <Text variant="labelSmall" style={{ opacity: 0.7 }}>
             {remaining > 0
-              ? `$${remaining.toLocaleString()} left`
-              : "Goal reached 🎉"}
+              ? `₱${remaining.toLocaleString()} left`
+              : "Goal completed 🎉"}
           </Text>
 
           <Button
             mode="contained-tonal"
             compact
-            textColor={theme.colors.onSecondaryContainer}
-            style={{ borderRadius: 10 }}
-            onPress={() => {}}
+            icon="plus"
+            onPress={() => handleOpenAddFunds(item)} // OPEN MODAL HERE
           >
-            Add
+            Add Funds
           </Button>
         </View>
       </Surface>
@@ -119,69 +178,89 @@ export default function GoalsSection() {
   };
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.container}
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-      >
-        {/* Section Header */}
-        <View style={styles.sectionHeader}>
-          <Text
-            variant="titleLarge"
-            style={{ color: theme.colors.onBackground, fontWeight: "800" }}
-          >
-            Savings Goals
-          </Text>
+      <AddGoalModal
+        visible={visible}
+        accounts={accounts || []}
+        onDismiss={() => setVisible(false)}
+        onSubmit={createGoalMutation.mutate}
+      />
 
-          <IconButton
-            icon="plus"
-            size={22}
-            mode="contained-tonal"
-            containerColor={theme.colors.primaryContainer}
-            iconColor={theme.colors.onPrimaryContainer}
-            onPress={() => {}}
-          />
-        </View>
-
-        <FlatList
-          data={MOCK_GOALS}
-          renderItem={renderGoal}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-        />
-      </View>
-    </ScrollView>
+      <AddFundsModal
+        visible={fundsVisible}
+        goal={selectedGoal || null}
+        onDismiss={() => {
+          setFundsVisible(false);
+        }}
+        bankAccounts={accounts || []}
+        onSubmit={(data) =>
+          addFundsMutation.mutate({
+            goalId: selectedGoal?.id || "",
+            targetAmount: data.targetAmount,
+            bankAccountId: data.bankAccountId,
+            currentAmount: data.currentAmount,
+          })
+        }
+      />
+      <FlatList
+        data={[{ id: "add" } as any, ...(goals?.data || [])]}
+        keyExtractor={(item: GoalType) => item.id}
+        renderItem={({ item }: { item: GoalType }) =>
+          item.id === "add" ? <AddGoalCard /> : renderGoal({ item })
+        }
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.sectionHeader}>
+            <Text variant="titleLarge" style={{ fontWeight: "800" }}>
+              Savings Goals
+            </Text>
+            <IconButton
+              icon="plus"
+              size={22}
+              mode="contained-tonal"
+              onPress={() => {}}
+            />
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 20,
+    flex: 1,
   },
   sectionHeader: {
-    paddingHorizontal: 20,
     marginBottom: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   listContent: {
-    paddingHorizontal: 20,
-    gap: 16,
+    padding: 20,
+    gap: 12, // Vertical spacing between items
+  },
+  addGoalCard: {
+    padding: 8,
+    borderRadius: 22,
+    marginBottom: 8,
+  },
+  addGoalContent: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   goalCard: {
-    width: 260,
+    width: "100%", // Take full width
     padding: 16,
     borderRadius: 22,
   },
   goalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
   },
   iconContainer: {
     borderRadius: 14,
@@ -190,9 +269,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
+  percentPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
   progressBar: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 6,
+    marginTop: 14,
   },
   goalFooter: {
     marginTop: 16,

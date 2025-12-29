@@ -1,52 +1,44 @@
 // lib/api.ts
-import axios from "axios";
-import { clearSession, getSession, saveSession } from "../session/session";
+import { authClient } from "../auth/auth-client";
 
-export const api = axios.create({
-  baseURL: process.env.BETTER_AUTH_URL,
-});
+type ApiOptions = RequestInit & {
+  headers?: Record<string, string>;
+};
 
-api.interceptors.request.use(async config => {
-  const { access } = await getSession();
-  if (access) {
-    config.headers.Authorization = `Bearer ${access}`;
+const BASE_URL = process.env.EXPO_PUBLIC_BETTER_AUTH_URL!;
+
+export const api = async <T = unknown>(
+  path: string,
+  options: ApiOptions = {}
+): Promise<T> => {
+  const cookies = authClient.getCookie();
+
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers ?? {}),
+  } as Record<string, string>;
+
+  if (cookies) {
+    headers.Cookie = cookies;
   }
-  return config;
-});
 
-api.interceptors.response.use(
-  res => res,
-  async error => {
-    if (error.response?.status === 401) {
-      const session = await getSession();
-      if (!session.refresh) {
-        await clearSession();
-        throw error;
-      }
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "omit", // REQUIRED per Better Auth docs
+  });
 
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/auth/refresh`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: session.refresh }),
-        }
-      );
-
-      if (!res.ok) {
-        await clearSession();
-        throw error;
-      }
-
-      const data = await res.json();
-      await saveSession(data);
-
-      error.config.headers.Authorization =
-        `Bearer ${data.accessToken}`;
-
-      return api.request(error.config);
-    }
-
-    throw error;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `API Error ${response.status}: ${text || response.statusText}`
+    );
   }
-);
+
+  // auto-handle empty responses
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as unknown as T;
+};

@@ -1,183 +1,194 @@
-import { ScrollView, StyleSheet, View } from "react-native";
-import { ProgressBar, Surface, Text, useTheme } from "react-native-paper";
+import { CategoryCircle } from "@/components/Insights/CategoryCircle";
+import { InsightCard } from "@/components/Insights/InsightCard";
+import { getAiInsights } from "@/services/finance/financeService";
+import React, { useMemo } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { Icon, ProgressBar, Surface, Text, useTheme } from "react-native-paper";
 
 export default function InsightsScreen() {
   const theme = useTheme();
 
+  const { data, isLoading } = getAiInsights();
+
+  const totalSpent = data?.totalSpent ?? 0;
+  const budgetLimit = data?.budgetLimit ?? 1;
+
+  // ✅ 2. Calculations using hooks (keep them above the return)
+  const progress = useMemo(
+    () => Math.min(totalSpent / budgetLimit, 1),
+    [totalSpent, budgetLimit]
+  );
+
+  // ✅ 3. Only now can you do a conditional return
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  const percentageUsed = Math.round(progress * 100);
+
   return (
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.scrollContent} // Applied padding here instead
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
     >
-      <Text
-        variant="headlineSmall"
-        style={[styles.title, { color: theme.colors.onBackground }]}
-      >
-        Spending Insights
-      </Text>
+      <View style={styles.header}>
+        <Text variant="headlineSmall" style={styles.title}>
+          Spending Insights
+        </Text>
+        <Text variant="bodyMedium" style={{ color: theme.colors.outline }}>
+          Current Month Analysis
+        </Text>
+      </View>
 
       {/* Main Budget Card */}
       <Surface
-        style={[
-          styles.statCard,
-          { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-        elevation={0}
+        style={[styles.statCard, { backgroundColor: theme.colors.surface }]}
+        elevation={1}
       >
-        <Text
-          variant="titleMedium"
-          style={{ color: theme.colors.onSurfaceVariant }}
-        >
-          Monthly Limit
-        </Text>
-        <Text
-          variant="displaySmall"
-          style={[styles.amountText, { color: theme.colors.onSurfaceVariant }]}
-        >
-          $1,240{" "}
-          <Text variant="titleLarge" style={{ opacity: 0.5 }}>
-            / $2,000
+        <View style={styles.cardHeader}>
+          <Text variant="titleMedium">Monthly Budget</Text>
+          <Icon
+            source={progress > 0.9 ? "alert-circle" : "trending-up"}
+            size={20}
+            color={progress > 0.9 ? theme.colors.error : theme.colors.primary}
+          />
+        </View>
+
+        <View style={styles.amountContainer}>
+          <Text variant="displaySmall" style={styles.amountText}>
+            ₱{totalSpent.toLocaleString()}
           </Text>
-        </Text>
+          <Text variant="titleMedium" style={styles.limitText}>
+            of ₱{budgetLimit.toLocaleString()}
+          </Text>
+        </View>
 
         <ProgressBar
-          progress={0.62}
-          color={theme.colors.primary}
+          progress={progress}
+          color={progress > 0.9 ? theme.colors.error : theme.colors.primary}
           style={styles.progressBar}
         />
 
         <View style={styles.infoRow}>
-          <Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-            You have{" "}
-            <Text style={{ color: theme.colors.primary, fontWeight: "bold" }}>
-              38%
-            </Text>{" "}
-            left for 12 days.
+          <Icon
+            source="information-outline"
+            size={16}
+            color={theme.colors.primary}
+          />
+          <Text variant="bodySmall" style={styles.infoText}>
+            You've used <Text style={styles.bold}>{percentageUsed}%</Text> of
+            your budget. {data?.daysLeft} days left.
           </Text>
         </View>
       </Surface>
 
-      <Text
-        variant="titleLarge"
-        style={[styles.sectionTitle, { color: theme.colors.onBackground }]}
-      >
+      {/* Top Categories Mapping */}
+      <Text variant="titleLarge" style={styles.sectionTitle}>
         Top Categories
       </Text>
-
-      {/* Category Row with Theme Colors */}
       <View style={styles.categoryRow}>
-        <CategoryCircle
-          label="Food"
-          percent={40}
-          color={theme.colors.primary}
-        />
-        <CategoryCircle
-          label="Transport"
-          percent={25}
-          color={theme.colors.secondary}
-        />
-        <CategoryCircle
-          label="Entertain."
-          percent={15}
-          color={theme.colors.tertiary}
-        />
+        {data?.topCategories.map(
+          (
+            item: {
+              categoryName: string;
+              categoryColor: string;
+              categoryAmount: number;
+            },
+            index: number
+          ) => (
+            <CategoryCircle
+              key={item.categoryName || index}
+              label={item.categoryName || "Other"}
+              percent={
+                totalSpent > 0
+                  ? Math.round(
+                      (Number(item.categoryAmount || 0) / totalSpent) * 100
+                    )
+                  : 0
+              }
+              color={item.categoryColor || theme.colors.secondary}
+            />
+          )
+        )}
       </View>
 
-      {/* Added a simple summary list for extra detail */}
-      <Surface
-        style={[
-          styles.summaryCard,
-          { borderColor: theme.colors.outlineVariant },
-        ]}
-        elevation={0}
-      >
-        <Text variant="labelLarge" style={{ color: theme.colors.primary }}>
-          Insight of the week
-        </Text>
-        <Text variant="bodyMedium">
-          You spent 12% less on Food compared to last week. Great job!
-        </Text>
-      </Surface>
+      {/* Dynamic AI Insight Card */}
+      <Text variant="titleLarge" style={styles.sectionTitle}>
+        Latest Insight
+      </Text>
+      {data?.aiInsight ? (
+        <InsightCard insight={data} />
+      ) : (
+        <Text style={styles.emptyText}>No AI insights generated yet.</Text>
+      )}
     </ScrollView>
   );
 }
 
-const CategoryCircle = ({ label, percent, color }: any) => {
-  const theme = useTheme();
-  return (
-    <View style={{ alignItems: "center" }}>
-      <View
-        style={[
-          styles.circleBase,
-          {
-            borderColor: color,
-            backgroundColor: theme.colors.elevation.level1,
-          },
-        ]}
-      >
-        <Text
-          variant="labelLarge"
-          style={{ fontWeight: "bold", color: theme.colors.onSurface }}
-        >
-          {percent}%
-        </Text>
-      </View>
-      <Text
-        variant="labelSmall"
-        style={{ marginTop: 8, fontWeight: "600", color: theme.colors.outline }}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-};
+/* -------------------- Styles -------------------- */
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    padding: 20,
-    paddingTop: 60,
-    paddingBottom: 100, // Space for the floating tab bar
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  scrollContent: { padding: 20, paddingTop: 60, paddingBottom: 120 },
+  header: { marginBottom: 24 },
+  title: { fontWeight: "900", letterSpacing: -0.5 },
+  statCard: { padding: 20, borderRadius: 28 },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
-  title: { fontWeight: "900", marginBottom: 20, letterSpacing: -0.5 },
-  statCard: {
-    padding: 24,
-    borderRadius: 28,
-  },
-  amountText: {
-    marginVertical: 12,
-    fontWeight: "bold",
-    letterSpacing: -1,
-  },
-  progressBar: {
-    height: 12,
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  infoRow: { marginTop: 16 },
-  sectionTitle: {
-    marginTop: 32,
-    marginBottom: 20,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-  },
+  amountContainer: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  amountText: { fontWeight: "800", letterSpacing: -1 },
+  limitText: { opacity: 0.6 },
+  progressBar: { height: 10, borderRadius: 5, marginVertical: 16 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 8, opacity: 0.8 },
+  infoText: { flex: 1 },
+  bold: { fontWeight: "700" },
+  sectionTitle: { marginTop: 32, marginBottom: 16, fontWeight: "800" },
   categoryRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 20,
+    paddingHorizontal: 0,
   },
   circleBase: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 5,
+    width: 85,
+    height: 85,
+    borderRadius: 43,
+    borderWidth: 6,
     justifyContent: "center",
     alignItems: "center",
   },
-  summaryCard: {
-    marginTop: 20,
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 8,
+  progressArc: {
+    position: "absolute",
+    width: 85,
+    height: 85,
+    borderRadius: 43,
+    borderWidth: 6,
+    borderColor: "transparent",
+    transform: [{ rotate: "45deg" }],
   },
+  percentText: { fontWeight: "bold" },
+  categoryLabel: {
+    marginTop: 10,
+    fontWeight: "600",
+    opacity: 0.7,
+    textAlign: "center",
+  },
+  summaryCard: { borderRadius: 24, borderLeftWidth: 6 },
+  summaryContent: { flexDirection: "row", gap: 16, alignItems: "center" },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: { opacity: 0.5, textAlign: "center", marginTop: 10 },
 });
